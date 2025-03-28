@@ -10,7 +10,7 @@ class MathSolverViewModel: ObservableObject {
     @Published var isLoading = false
     
     private var bedrockClient: BedrockRuntimeClient?
-    private let modelId = "anthropic.claude-3-sonnet-20240229-v1:0"
+    private let modelId = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
     
     // Reference to the authentication manager
     private weak var authManager: AuthenticationManager?
@@ -91,9 +91,7 @@ class MathSolverViewModel: ObservableObject {
         
         let base64Size2 = Int(Double(finalImageData.count) * 1.37)
         print("Final image size: \(ByteCountFormatter.string(fromByteCount: Int64(finalImageData.count), countStyle: .file)), estimated base64 size: \(ByteCountFormatter.string(fromByteCount: Int64(base64Size2), countStyle: .file))")
-        
-//        let base64Image = finalImageData.base64EncodedString()
-        
+                
         let systemPrompt = """
 You are a math and physics tutor. Your task is to:
 1. Read and understand the math or physics problem in the image
@@ -136,7 +134,7 @@ Format your response with clear section headings and numbered steps.
                 for try await event in stream {
                     switch event {
                     case .messagestart(_):
-                        print("\nAI-assistant: ")
+                        print("AI-assistant started to stream")
 
                     case .contentblockdelta(let deltaEvent):
                         if case .text(let text) = deltaEvent.delta {
@@ -146,7 +144,7 @@ Format your response with clear section headings and numbered steps.
                         }
 
                     case .messagestop(_):
-                        print("\n")
+                        print("Stream ended")
                         let assistantMessage = BedrockRuntimeClientTypes.Message(
                             content: [.text(self.streamedResponse)],
                             role: .assistant
