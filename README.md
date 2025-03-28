@@ -7,7 +7,7 @@ An iOS application that uses AWS Bedrock and Claude to solve math and physics pr
 - Take a photo or select an image from your photo library
 - Analyze math and physics problems using Claude AI
 - Get step-by-step solutions with explanations
-- Secure authentication using AWS Cognito
+- Secure authentication using Sign in with Apple (SIWA) and AWS STS
 
 ## Screenshot
 
@@ -18,7 +18,8 @@ An iOS application that uses AWS Bedrock and Claude to solve math and physics pr
 - Swift and SwiftUI for the iOS app
 - AWS Bedrock for AI image analysis and problem solving
 - Claude 3 Sonnet model for high-quality responses
-- AWS Cognito for user authentication
+- Sign in with Apple (SIWA) for authentication
+- AWS STS for secure token exchange
 - Streaming responses for real-time feedback
 
 ## How It Works
@@ -33,8 +34,9 @@ An iOS application that uses AWS Bedrock and Claude to solve math and physics pr
 
 - iOS 16.0+
 - Xcode 15.0+
-- AWS account with Bedrock and Cognito configured
+- AWS account with Bedrock configured
+- Sign in with Apple enabled in your Apple Developer account
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
