@@ -10,7 +10,7 @@ class MathSolverViewModel: ObservableObject {
     @Published var isLoading = false
     
     private var bedrockClient: BedrockRuntimeClient?
-    private let modelId = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+    private let modelId = "anthropic.claude-3-sonnet-20240229-v1:0"
     
     // Reference to the authentication manager
     private weak var authManager: AuthenticationManager?
@@ -96,24 +96,8 @@ class MathSolverViewModel: ObservableObject {
         
         let base64Image = finalImageData.base64EncodedString()
         
-        // Create the system prompt
-        let systemPrompt = """
-        You are a math and physics tutor. Your task is to:
-        1. Read and understand the math or physics problem in the image
-        2. Provide a clear, step-by-step solution to the problem
-        3. Briefly explain any relevant concepts used in solving the problem
-        4. Be precise and accurate in your calculations
-        5. Use mathematical notation when appropriate
-        
-        Format your response with clear section headings and numbered steps.
-        """
-
-        // Create the request body
+        // Create the request body for Converse API
         let requestBody: [String: Any] = [
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 4096,
-            "temperature": 0.0,
-            "system": systemPrompt,
             "messages": [
                 [
                     "role": "user",
@@ -132,13 +116,26 @@ class MathSolverViewModel: ObservableObject {
                         ]
                     ]
                 ]
-            ]
+            ],
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 4096,
+            "temperature": 0.0,
+            "system": """
+            You are a math and physics tutor. Your task is to:
+            1. Read and understand the math or physics problem in the image
+            2. Provide a clear, step-by-step solution to the problem
+            3. Briefly explain any relevant concepts used in solving the problem
+            4. Be precise and accurate in your calculations
+            5. Use mathematical notation when appropriate
+            
+            Format your response with clear section headings and numbered steps.
+            """
         ]
         
         let jsonData = try! JSONSerialization.data(withJSONObject: requestBody)
         
-        // Create the request
-        let input = InvokeModelWithResponseStreamInput(
+        // Create the Converse API request
+        let input = ConverseStreamInput(
             body: jsonData,
             contentType: "application/json",
             modelId: modelId
@@ -147,43 +144,47 @@ class MathSolverViewModel: ObservableObject {
         // Make the streaming request
         Task {
             do {
-                let output = try await bedrockClient.invokeModelWithResponseStream(input: input)
+                let output = try await bedrockClient.converseStream(input: input)
                 
                 // Process the streaming response
                 for try await chunk in output.body! {
-                    if case let .chunk(chunkData) = chunk,
-                       let json = try? JSONSerialization.jsonObject(with: chunkData.bytes!) as? [String: Any],
-                       let type = json["type"] as? String {
-                        
-                        if type == "message_delta" {
-                            if let delta = json["delta"] as? [String: Any],
-                               let content = delta["content"] as? [[String: Any]],
-                               let firstContent = content.first,
-                               let contentType = firstContent["type"] as? String,
-                               contentType == "text",
-                               let text = firstContent["text"] as? String {
+                    if let bytes = chunk.bytes {
+                        if let json = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any] {
+                            // Extract message content from the response
+                            if let message = json["message"] as? [String: Any],
+                               let content = message["content"] as? [[String: Any]] {
                                 
-                                DispatchQueue.main.async {
-                                    print("Received message_delta text chunk: \(text.prefix(20))...")
-                                    self.streamedResponse += text
-                                    print("Current response length: \(self.streamedResponse.count)")
+                                for contentItem in content {
+                                    if let type = contentItem["type"] as? String, type == "text",
+                                       let text = contentItem["text"] as? String {
+                                        
+                                        DispatchQueue.main.async {
+                                            self.streamedResponse += text
+                                            print("Current response length: \(self.streamedResponse.count)")
+                                        }
+                                    }
                                 }
                             }
-                        } else if type == "content_block_delta" {
+                            
+                            // Handle delta updates
                             if let delta = json["delta"] as? [String: Any],
-                               let text = delta["text"] as? String {
+                               let content = delta["content"] as? [[String: Any]] {
                                 
-                                DispatchQueue.main.async {
-                                    print("Received content_block_delta text chunk: \(text.prefix(20))...")
-                                    self.streamedResponse += text
-                                    print("Current response length: \(self.streamedResponse.count)")
+                                for contentItem in content {
+                                    if let type = contentItem["type"] as? String, type == "text",
+                                       let text = contentItem["text"] as? String {
+                                        
+                                        DispatchQueue.main.async {
+                                            self.streamedResponse += text
+                                            print("Current response length: \(self.streamedResponse.count)")
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
                 
-                print(self.streamedResponse)
                 DispatchQueue.main.async {
                     self.isLoading = false
                     print("Streaming completed. Final response length: \(self.streamedResponse.count)")
