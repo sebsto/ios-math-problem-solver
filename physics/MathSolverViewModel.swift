@@ -5,30 +5,41 @@ import Foundation
 import SmithyIdentity
 import UIKit
 
+/// ViewModel responsible for handling math problem solving using AWS Bedrock Claude model
 class MathSolverViewModel: ObservableObject {
+    /// The current response being streamed from the model
     @Published var streamedResponse = ""
+    /// Indicates whether a request is in progress
     @Published var isLoading = false
 
+    /// The Bedrock client used to make API calls
     private var bedrockClient: BedrockRuntimeClient?
+    /// The ID of the Claude model to use for inference
     private let modelId = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
 
-    // Reference to the authentication manager
+    /// Reference to the authentication manager
     private weak var authManager: AuthenticationManager?
 
+    /// Initializes the view model with an optional authentication manager
+    /// - Parameter authManager: The authentication manager to use for AWS credentials
     init(authManager: AuthenticationManager? = nil) {
         self.authManager = authManager
         // Don't set up client in init - wait until we have credentials
     }
-
+    
+    /// Sets the authentication manager and initializes the Bedrock client
+    /// - Parameter authManager: The authentication manager to use for AWS credentials
     func setAuthManager(_ authManager: AuthenticationManager) {
         self.authManager = authManager
         setupBedrockClient()
     }
-
+    
+    /// Updates the Bedrock client with the latest credentials
     func updateCredentials() {
         setupBedrockClient()
     }
-
+    
+    /// Sets up the Bedrock client with the current authentication credentials
     private func setupBedrockClient() {
         do {
             let config = try BedrockRuntimeClient.BedrockRuntimeClientConfiguration(region: "us-east-1")
@@ -48,6 +59,8 @@ class MathSolverViewModel: ObservableObject {
         }
     }
 
+    /// Analyzes a math or physics problem in an image using AWS Bedrock Claude model
+    /// - Parameter image: The UIImage containing the math/physics problem to solve
     func analyzeImage(_ image: UIImage) {
         guard let bedrockClient = bedrockClient else {
             print("Bedrock client not initialized. Please sign in first.")
@@ -92,6 +105,7 @@ class MathSolverViewModel: ObservableObject {
         let base64Size2 = Int(Double(finalImageData.count) * 1.37)
         print("Final image size: \(ByteCountFormatter.string(fromByteCount: Int64(finalImageData.count), countStyle: .file)), estimated base64 size: \(ByteCountFormatter.string(fromByteCount: Int64(base64Size2), countStyle: .file))")
 
+        // Define the system prompt that instructs Claude how to respond
         let systemPrompt = """
         You are a math and physics tutor. Your task is to:
         1. Read and understand the math or physics problem in the image
@@ -104,19 +118,25 @@ class MathSolverViewModel: ObservableObject {
         """
         let system: BedrockRuntimeClientTypes.SystemContentBlock = .text(systemPrompt)
 
+        // Create the user message with text prompt and image
         let userPrompt = "Please solve this math or physics problem. Show all steps and explain the concepts involved."
         let prompt: BedrockRuntimeClientTypes.ContentBlock = .text(userPrompt)
         let image: BedrockRuntimeClientTypes.ContentBlock = .image(.init(format: .jpeg, source: .bytes(finalImageData)))
 
+        // Create the user message with both text and image content
         let userMessage = BedrockRuntimeClientTypes.Message(
             content: [prompt, image],
             role: .user
         )
 
+        // Initialize the messages array with the user message
         var messages: [BedrockRuntimeClientTypes.Message] = []
         messages.append(userMessage)
 
+        // Configure the inference parameters
         let inferenceConfig: BedrockRuntimeClientTypes.InferenceConfiguration = .init(maxTokens: 4096, temperature: 0.0)
+        
+        // Create the input for the Converse API with streaming
         let input = ConverseStreamInput(inferenceConfig: inferenceConfig, messages: messages, modelId: modelId, system: [system])
 
         // Make the streaming request
@@ -131,13 +151,14 @@ class MathSolverViewModel: ObservableObject {
                     return
                 }
 
-                // Iterate through the stream
+                // Iterate through the stream events
                 for try await event in stream {
                     switch event {
                     case .messagestart:
                         print("AI-assistant started to stream")
 
                     case let .contentblockdelta(deltaEvent):
+                        // Handle text content as it arrives
                         if case let .text(text) = deltaEvent.delta {
                             DispatchQueue.main.async {
                                 self.streamedResponse += text
@@ -146,6 +167,7 @@ class MathSolverViewModel: ObservableObject {
 
                     case .messagestop:
                         print("Stream ended")
+                        // Create a complete assistant message from the streamed response
                         let assistantMessage = BedrockRuntimeClientTypes.Message(
                             content: [.text(self.streamedResponse)],
                             role: .assistant
@@ -171,6 +193,9 @@ class MathSolverViewModel: ObservableObject {
         }
     }
 
+    /// Resizes an image if it exceeds the maximum allowed dimensions
+    /// - Parameter image: The original UIImage to resize
+    /// - Returns: A resized UIImage if the original was too large, otherwise the original image
     private func resizeImageIfNeeded(_ image: UIImage) -> UIImage {
         let maxDimension: CGFloat = 2048 // Max dimension in pixels
         let scale = image.scale
