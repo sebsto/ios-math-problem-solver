@@ -1,8 +1,7 @@
-import SwiftUI
-import PhotosUI
-import MarkdownUI
 import LaTeXSwiftUI
-
+import MarkdownUI
+import PhotosUI
+import SwiftUI
 
 struct ContentView: View {
     @StateObject private var viewModel: MathSolverViewModel
@@ -12,12 +11,12 @@ struct ContentView: View {
     @State private var photoPickerItem: PhotosPickerItem?
     @State private var isResponseExpanded = false
     @EnvironmentObject var authManager: AuthenticationManager
-    
+
     init() {
         // Initialize the view model with the auth manager that will be provided via environment
-        self._viewModel = StateObject(wrappedValue: MathSolverViewModel())
+        _viewModel = StateObject(wrappedValue: MathSolverViewModel())
     }
-    
+
     var body: some View {
         NavigationView {
             VStack {
@@ -30,7 +29,7 @@ struct ContentView: View {
                             .frame(maxHeight: 200)
                             .transition(.opacity)
                     }
-                    
+
                     HStack {
                         // Camera Button
                         Button(action: {
@@ -43,10 +42,11 @@ struct ContentView: View {
                                 .foregroundColor(.white)
                                 .cornerRadius(10)
                         }
-                        
+
                         // Photo Library Button
                         PhotosPicker(selection: $photoPickerItem,
-                                   matching: .images) {
+                                     matching: .images)
+                        {
                             Label("Library", systemImage: "photo.on.rectangle")
                                 .frame(maxWidth: .infinity)
                                 .padding()
@@ -67,9 +67,9 @@ struct ContentView: View {
                                 .frame(height: 40)
                                 .cornerRadius(5)
                         }
-                        
+
                         Spacer()
-                        
+
                         Button(action: {
                             showImagePicker = true
                         }) {
@@ -79,7 +79,7 @@ struct ContentView: View {
                                 .foregroundColor(.white)
                                 .cornerRadius(8)
                         }
-                        
+
                         PhotosPicker(selection: $photoPickerItem, matching: .images) {
                             Image(systemName: "photo.on.rectangle")
                                 .padding(8)
@@ -91,7 +91,7 @@ struct ContentView: View {
                     .padding(.horizontal)
                     .padding(.bottom, 4)
                 }
-                
+
                 // Toggle button for expanding/collapsing
                 if !viewModel.streamedResponse.isEmpty {
                     Button(action: {
@@ -99,7 +99,7 @@ struct ContentView: View {
                             isResponseExpanded.toggle()
                         }
                     }) {
-                        Label(isResponseExpanded ? "Show Image" : "Expand Solution", 
+                        Label(isResponseExpanded ? "Show Image" : "Expand Solution",
                               systemImage: isResponseExpanded ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left")
                             .font(.caption)
                             .padding(.vertical, 4)
@@ -109,7 +109,7 @@ struct ContentView: View {
                     }
                     .padding(.bottom, 4)
                 }
-                
+
                 // Response section with auto-scrolling
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -118,7 +118,7 @@ struct ContentView: View {
                                 ProgressView()
                                     .padding()
                             }
-                            
+
                             if !viewModel.streamedResponse.isEmpty {
                                 // Display the full response
                                 Markdown(viewModel.streamedResponse)
@@ -132,7 +132,7 @@ struct ContentView: View {
                                     .foregroundColor(.gray)
                                     .padding(.horizontal)
                             }
-                            
+
                             // Invisible element at the bottom for scrolling
                             Color.clear
                                 .frame(height: 1)
@@ -162,7 +162,8 @@ struct ContentView: View {
             .onChange(of: photoPickerItem) {
                 Task {
                     if let data = try? await photoPickerItem?.loadTransferable(type: Data.self),
-                       let image = UIImage(data: data) {
+                       let image = UIImage(data: data)
+                    {
                         selectedImage = image
                         viewModel.analyzeImage(image)
                     }
@@ -198,36 +199,37 @@ struct ImagePicker: UIViewControllerRepresentable {
     @Binding var image: UIImage?
     let sourceType: UIImagePickerController.SourceType
     let onImageSelected: (UIImage?) -> Void
-    
+
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
         picker.sourceType = sourceType
         picker.delegate = context.coordinator
         return picker
     }
-    
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
-    
+
+    func updateUIViewController(_: UIImagePickerController, context _: Context) {}
+
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
-    
+
     class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
         let parent: ImagePicker
-        
+
         init(_ parent: ImagePicker) {
             self.parent = parent
         }
-        
+
         func imagePickerController(_ picker: UIImagePickerController,
-                                 didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+                                   didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any])
+        {
             if let image = info[.originalImage] as? UIImage {
                 parent.image = image
                 parent.onImageSelected(image)
             }
             picker.dismiss(animated: true)
         }
-        
+
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
             picker.dismiss(animated: true)
         }

@@ -6,12 +6,13 @@ import PackageDescription
 let package = Package(
     name: "physics",
     platforms: [
-        .iOS(.v15)
+        .iOS(.v15),
     ],
     products: [
         .library(
             name: "physics",
-            targets: ["physics"]),
+            targets: ["physics"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/gonzalezreal/MarkdownUI", from: "2.0.0"),
@@ -24,9 +25,11 @@ let package = Package(
                 "MarkdownUI",
                 .product(name: "AWSBedrockRuntime", package: "aws-sdk-swift"),
                 .product(name: "AWSSTS", package: "aws-sdk-swift"),
-            ]),
+            ]
+        ),
         .testTarget(
             name: "physicsTests",
-            dependencies: ["physics"]),
+            dependencies: ["physics"]
+        ),
     ]
 )

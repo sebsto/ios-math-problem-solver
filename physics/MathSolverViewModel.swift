@@ -1,17 +1,17 @@
-import Foundation
-import UIKit
 @preconcurrency import AWSBedrockRuntime
 @preconcurrency import AWSClientRuntime
 import AWSSDKIdentity
+import Foundation
 import SmithyIdentity
+import UIKit
 
 class MathSolverViewModel: ObservableObject {
     @Published var streamedResponse = ""
     @Published var isLoading = false
-    
+
     private var bedrockClient: BedrockRuntimeClient?
     private let modelId = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
-    
+
     // Reference to the authentication manager
     private weak var authManager: AuthenticationManager?
 
@@ -19,20 +19,20 @@ class MathSolverViewModel: ObservableObject {
         self.authManager = authManager
         // Don't set up client in init - wait until we have credentials
     }
-    
+
     func setAuthManager(_ authManager: AuthenticationManager) {
         self.authManager = authManager
         setupBedrockClient()
     }
-    
+
     func updateCredentials() {
         setupBedrockClient()
     }
-    
+
     private func setupBedrockClient() {
         do {
             let config = try BedrockRuntimeClient.BedrockRuntimeClientConfiguration(region: "us-east-1")
-            
+
             // Use identity resolver from AuthenticationManager if available
             if let authManager = authManager, let identityResolver = authManager.identityResolver {
                 config.awsCredentialIdentityResolver = identityResolver
@@ -47,7 +47,7 @@ class MathSolverViewModel: ObservableObject {
             bedrockClient = nil
         }
     }
-    
+
     func analyzeImage(_ image: UIImage) {
         guard let bedrockClient = bedrockClient else {
             print("Bedrock client not initialized. Please sign in first.")
@@ -57,24 +57,24 @@ class MathSolverViewModel: ObservableObject {
             }
             return
         }
-        
+
         isLoading = true
         streamedResponse = ""
-        
+
         // Resize image to ensure it's under 5MB when base64 encoded
         let resizedImage = resizeImageIfNeeded(image)
-        
+
         // Start with high quality and progressively reduce until under limit
         var compressionQuality: CGFloat = 0.9
         var imageData: Data?
-        var base64Size: Int = 0
-        
+        var base64Size = 0
+
         repeat {
             imageData = resizedImage.jpegData(compressionQuality: compressionQuality)
             if let data = imageData {
                 // Calculate base64 size (approximately 4/3 of original size)
                 base64Size = Int(Double(data.count) * 1.37)
-                
+
                 // If still too large, reduce quality and try again
                 if base64Size > 5 * 1024 * 1024 { // 5MB
                     compressionQuality -= 0.1
@@ -82,41 +82,43 @@ class MathSolverViewModel: ObservableObject {
                 }
             }
         } while base64Size > 5 * 1024 * 1024 && compressionQuality > 0.1
-        
+
         guard let finalImageData = imageData else {
             print("Failed to convert image to data")
             isLoading = false
             return
         }
-        
+
         let base64Size2 = Int(Double(finalImageData.count) * 1.37)
         print("Final image size: \(ByteCountFormatter.string(fromByteCount: Int64(finalImageData.count), countStyle: .file)), estimated base64 size: \(ByteCountFormatter.string(fromByteCount: Int64(base64Size2), countStyle: .file))")
-                
-        let systemPrompt = """
-You are a math and physics tutor. Your task is to:
-1. Read and understand the math or physics problem in the image
-2. Provide a clear, step-by-step solution to the problem
-3. Briefly explain any relevant concepts used in solving the problem
-4. Be precise and accurate in your calculations
-5. Use mathematical notation when appropriate
 
-Format your response with clear section headings and numbered steps.
-"""
+        let systemPrompt = """
+        You are a math and physics tutor. Your task is to:
+        1. Read and understand the math or physics problem in the image
+        2. Provide a clear, step-by-step solution to the problem
+        3. Briefly explain any relevant concepts used in solving the problem
+        4. Be precise and accurate in your calculations
+        5. Use mathematical notation when appropriate
+
+        Format your response with clear section headings and numbered steps.
+        """
         let system: BedrockRuntimeClientTypes.SystemContentBlock = .text(systemPrompt)
-        
-        var messages: [BedrockRuntimeClientTypes.Message] = []
-        let prompt: BedrockRuntimeClientTypes.ContentBlock = .text("Please solve this math or physics problem. Show all steps and explain the concepts involved.")
+
+        let userPrompt = "Please solve this math or physics problem. Show all steps and explain the concepts involved."
+        let prompt: BedrockRuntimeClientTypes.ContentBlock = .text(userPrompt)
         let image: BedrockRuntimeClientTypes.ContentBlock = .image(.init(format: .jpeg, source: .bytes(finalImageData)))
 
-        let userMessage: BedrockRuntimeClientTypes.Message = BedrockRuntimeClientTypes.Message(
+        let userMessage = BedrockRuntimeClientTypes.Message(
             content: [prompt, image],
             role: .user
         )
+
+        var messages: [BedrockRuntimeClientTypes.Message] = []
         messages.append(userMessage)
 
         let inferenceConfig: BedrockRuntimeClientTypes.InferenceConfiguration = .init(maxTokens: 4096, temperature: 0.0)
         let input = ConverseStreamInput(inferenceConfig: inferenceConfig, messages: messages, modelId: modelId, system: [system])
-        
+
         // Make the streaming request
         Task {
             do {
@@ -129,21 +131,20 @@ Format your response with clear section headings and numbered steps.
                     return
                 }
 
-                
                 // Iterate through the stream
                 for try await event in stream {
                     switch event {
-                    case .messagestart(_):
+                    case .messagestart:
                         print("AI-assistant started to stream")
 
-                    case .contentblockdelta(let deltaEvent):
-                        if case .text(let text) = deltaEvent.delta {
+                    case let .contentblockdelta(deltaEvent):
+                        if case let .text(text) = deltaEvent.delta {
                             DispatchQueue.main.async {
                                 self.streamedResponse += text
                             }
                         }
 
-                    case .messagestop(_):
+                    case .messagestop:
                         print("Stream ended")
                         let assistantMessage = BedrockRuntimeClientTypes.Message(
                             content: [.text(self.streamedResponse)],
@@ -155,7 +156,7 @@ Format your response with clear section headings and numbered steps.
                         break
                     }
                 }
-                
+
                 DispatchQueue.main.async {
                     self.isLoading = false
                     print("Streaming completed. Final response length: \(self.streamedResponse.count)")
@@ -169,31 +170,31 @@ Format your response with clear section headings and numbered steps.
             }
         }
     }
-    
+
     private func resizeImageIfNeeded(_ image: UIImage) -> UIImage {
         let maxDimension: CGFloat = 2048 // Max dimension in pixels
         let scale = image.scale
         let originalSize = image.size
-        
+
         // Calculate scale factor to reduce image size
         let scaleFactor = min(maxDimension / originalSize.width, maxDimension / originalSize.height)
-        
+
         // If image is already smaller than maxDimension, return original
         if scaleFactor >= 1 {
             return image
         }
-        
+
         // Calculate new size
         let newWidth = originalSize.width * scaleFactor
         let newHeight = originalSize.height * scaleFactor
         let newSize = CGSize(width: newWidth, height: newHeight)
-        
+
         // Create new image
         UIGraphicsBeginImageContextWithOptions(newSize, false, scale)
         image.draw(in: CGRect(origin: .zero, size: newSize))
         let resizedImage = UIGraphicsGetImageFromCurrentImageContext()
         UIGraphicsEndImageContext()
-        
+
         print("Resized image from \(Int(originalSize.width))x\(Int(originalSize.height)) to \(Int(newWidth))x\(Int(newHeight))")
         return resizedImage ?? image
     }

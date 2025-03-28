@@ -3,7 +3,7 @@ import SwiftUI
 @main
 struct MathSolverApp: App {
     @StateObject private var authManager = AuthenticationManager()
-    
+
     var body: some Scene {
         WindowGroup {
             if authManager.isAuthenticated {
