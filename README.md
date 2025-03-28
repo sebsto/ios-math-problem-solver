@@ -1,56 +1,83 @@
-# Math & Physics Problem Solver
+# Math Problem Solver
 
-An iOS application that uses Amazon Bedrock with Claude to solve math and physics problems from photos.
+This iOS application has been entirely generated using Amazon Q Developer CLI. It allows users to take photos of math and physics problems and get step-by-step solutions using Amazon Bedrock and Claude 3.7 Sonnet.
 
 ## Features
 
-- Take photos of math or physics problems using the device camera
-- Send images to Amazon Bedrock using Claude Anthropic model
-- Get step-by-step solutions with explanations of relevant concepts
-- View results in real-time with streaming API
+- Sign in with Apple authentication
+- AWS IAM integration using web identity federation
+- Camera integration for capturing math problems
+- Photo library access for selecting existing images
+- Real-time streaming responses from Claude 3.7 Sonnet
+- Markdown rendering of mathematical explanations
 
-## Requirements
+## Project Structure
 
-- iOS 15.0+
-- Xcode 14.0+
-- AWS account with Bedrock access
-- AWS credentials configured on your device
-
-## Setup
-
-1. Clone the repository
-2. Configure AWS credentials with Bedrock access
-3. Open the project in Xcode
-4. Build and run on a physical iOS device (camera functionality requires a physical device)
-
-## How It Works
-
-1. The app captures an image using the device camera
-2. The image is converted to base64 and sent to Amazon Bedrock
-3. Claude analyzes the problem and provides a step-by-step solution
-4. Results are displayed progressively as they stream in
+```
+physics/
+├── Assets.xcassets/            # App icons and colors
+├── AuthenticationManager.swift # Handles Sign in with Apple and AWS credentials
+├── ContentView.swift           # Main UI with camera and response display
+├── LoginView.swift             # Sign in with Apple implementation
+├── MathSolverApp.swift         # App entry point and state management
+├── MathSolverViewModel.swift   # Business logic and Bedrock integration
+└── physics.entitlements        # App capabilities configuration
+```
 
 ## Architecture
 
-- **SwiftUI**: For the user interface
-- **AWS SDK for Swift**: For communication with Amazon Bedrock
-- **Claude 3 Sonnet**: For problem analysis and solution generation
+The application follows a Model-View-ViewModel (MVVM) architecture:
 
-## System Prompt
+1. **Views**: 
+   - `LoginView`: Handles user authentication with Sign in with Apple
+   - `ContentView`: Main interface for capturing/selecting images and displaying solutions
 
-The app uses a carefully crafted system prompt to guide Claude:
+2. **ViewModels**:
+   - `MathSolverViewModel`: Manages the business logic for image processing and Bedrock API calls
 
+3. **Models/Managers**:
+   - `AuthenticationManager`: Handles authentication state and AWS credential management
+
+## Authentication Flow
+
+1. User authenticates with Sign in with Apple
+2. The identity token is used to assume an AWS IAM role using `STSWebIdentityAWSCredentialIdentityResolver`
+3. The credential resolver is used to authenticate AWS Bedrock API calls
+4. No AWS credentials are stored in the application code
+
+## Getting Started
+
+To run this project:
+
+1. Update the AWS configuration in `AuthenticationManager.swift`:
+   - Set your AWS account number
+   - Configure your IAM role name
+   - Set your preferred AWS region
+
+2. Configure Sign in with Apple in your Apple Developer account
+
+3. Set up an IAM role in your AWS account that trusts the Apple identity provider
+
+## Amazon Q Developer CLI
+
+This project was generated using Amazon Q Developer CLI, a powerful tool that helps developers build applications using natural language instructions.
+
+### Installation
+
+To install Amazon Q Developer CLI:
+
+```bash
+# For macOS
+brew install aws/tap/q
+
+# For Linux/Windows (via pip)
+pip install amazon-q-developer-cli
 ```
-You are a math and physics tutor. Your task is to:
-1. Read and understand the math or physics problem in the image
-2. Provide a clear, step-by-step solution to the problem
-3. Briefly explain any relevant concepts used in solving the problem
-4. Be precise and accurate in your calculations
-5. Use mathematical notation when appropriate
 
-Format your response with clear section headings and numbered steps.
-```
+For more information, visit:
+- [Amazon Q Developer Documentation](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/what-is-amazon-q-developer.html)
+- [Amazon Q Developer CLI GitHub](https://github.com/aws/amazon-q-developer-cli)
 
-## Privacy
+## License
 
-The app requires camera permissions to function. All image processing is done through secure AWS services.
+This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
