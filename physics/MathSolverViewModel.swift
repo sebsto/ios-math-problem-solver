@@ -17,7 +17,7 @@ class MathSolverViewModel: ObservableObject {
 
     init(authManager: AuthenticationManager? = nil) {
         self.authManager = authManager
-        setupBedrockClient()
+        // Don't set up client in init - wait until we have credentials
     }
     
     func setAuthManager(_ authManager: AuthenticationManager) {
@@ -31,9 +31,7 @@ class MathSolverViewModel: ObservableObject {
     
     private func setupBedrockClient() {
         do {
-            let config = try BedrockRuntimeClient.BedrockRuntimeClientConfiguration(
-                region: "us-east-1"
-            )
+            let config = try BedrockRuntimeClient.BedrockRuntimeClientConfiguration(region: "us-east-1")
             
             // Use identity resolver from AuthenticationManager if available
             if let authManager = authManager, let identityResolver = authManager.identityResolver {
@@ -94,94 +92,69 @@ class MathSolverViewModel: ObservableObject {
         let base64Size2 = Int(Double(finalImageData.count) * 1.37)
         print("Final image size: \(ByteCountFormatter.string(fromByteCount: Int64(finalImageData.count), countStyle: .file)), estimated base64 size: \(ByteCountFormatter.string(fromByteCount: Int64(base64Size2), countStyle: .file))")
         
-        let base64Image = finalImageData.base64EncodedString()
+//        let base64Image = finalImageData.base64EncodedString()
         
-        // Create the request body for Converse API
-        let requestBody: [String: Any] = [
-            "messages": [
-                [
-                    "role": "user",
-                    "content": [
-                        [
-                            "type": "image",
-                            "source": [
-                                "type": "base64",
-                                "media_type": "image/jpeg",
-                                "data": base64Image
-                            ]
-                        ],
-                        [
-                            "type": "text",
-                            "text": "Please solve this math or physics problem. Show all steps and explain the concepts involved."
-                        ]
-                    ]
-                ]
-            ],
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 4096,
-            "temperature": 0.0,
-            "system": """
-            You are a math and physics tutor. Your task is to:
-            1. Read and understand the math or physics problem in the image
-            2. Provide a clear, step-by-step solution to the problem
-            3. Briefly explain any relevant concepts used in solving the problem
-            4. Be precise and accurate in your calculations
-            5. Use mathematical notation when appropriate
-            
-            Format your response with clear section headings and numbered steps.
-            """
-        ]
+        let systemPrompt = """
+You are a math and physics tutor. Your task is to:
+1. Read and understand the math or physics problem in the image
+2. Provide a clear, step-by-step solution to the problem
+3. Briefly explain any relevant concepts used in solving the problem
+4. Be precise and accurate in your calculations
+5. Use mathematical notation when appropriate
+
+Format your response with clear section headings and numbered steps.
+"""
+        let system: BedrockRuntimeClientTypes.SystemContentBlock = .text(systemPrompt)
         
-        let jsonData = try! JSONSerialization.data(withJSONObject: requestBody)
-        
-        // Create the Converse API request
-        let input = ConverseStreamInput(
-            body: jsonData,
-            contentType: "application/json",
-            modelId: modelId
+        var messages: [BedrockRuntimeClientTypes.Message] = []
+        let prompt: BedrockRuntimeClientTypes.ContentBlock = .text("Please solve this math or physics problem. Show all steps and explain the concepts involved.")
+        let image: BedrockRuntimeClientTypes.ContentBlock = .image(.init(format: .jpeg, source: .bytes(finalImageData)))
+
+        let userMessage: BedrockRuntimeClientTypes.Message = BedrockRuntimeClientTypes.Message(
+            content: [prompt, image],
+            role: .user
         )
+        messages.append(userMessage)
+
+        let inferenceConfig: BedrockRuntimeClientTypes.InferenceConfiguration = .init(maxTokens: 4096, temperature: 0.0)
+        let input = ConverseStreamInput(inferenceConfig: inferenceConfig, messages: messages, modelId: modelId, system: [system])
         
         // Make the streaming request
         Task {
             do {
-                let output = try await bedrockClient.converseStream(input: input)
-                
+                // Process the stream
+                let response = try await bedrockClient.converseStream(input: input)
+
                 // Process the streaming response
-                for try await chunk in output.body! {
-                    if let bytes = chunk.bytes {
-                        if let json = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any] {
-                            // Extract message content from the response
-                            if let message = json["message"] as? [String: Any],
-                               let content = message["content"] as? [[String: Any]] {
-                                
-                                for contentItem in content {
-                                    if let type = contentItem["type"] as? String, type == "text",
-                                       let text = contentItem["text"] as? String {
-                                        
-                                        DispatchQueue.main.async {
-                                            self.streamedResponse += text
-                                            print("Current response length: \(self.streamedResponse.count)")
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            // Handle delta updates
-                            if let delta = json["delta"] as? [String: Any],
-                               let content = delta["content"] as? [[String: Any]] {
-                                
-                                for contentItem in content {
-                                    if let type = contentItem["type"] as? String, type == "text",
-                                       let text = contentItem["text"] as? String {
-                                        
-                                        DispatchQueue.main.async {
-                                            self.streamedResponse += text
-                                            print("Current response length: \(self.streamedResponse.count)")
-                                        }
-                                    }
-                                }
+                guard let stream = response.stream else {
+                    print("No stream available")
+                    return
+                }
+
+                
+                // Iterate through the stream
+                for try await event in stream {
+                    switch event {
+                    case .messagestart(_):
+                        print("\nAI-assistant: ")
+
+                    case .contentblockdelta(let deltaEvent):
+                        if case .text(let text) = deltaEvent.delta {
+                            DispatchQueue.main.async {
+                                self.streamedResponse += text
                             }
                         }
+
+                    case .messagestop(_):
+                        print("\n")
+                        let assistantMessage = BedrockRuntimeClientTypes.Message(
+                            content: [.text(self.streamedResponse)],
+                            role: .assistant
+                        )
+                        messages.append(assistantMessage)
+
+                    default:
+                        break
                     }
                 }
                 
